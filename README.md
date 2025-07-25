@@ -1,6 +1,6 @@
 # Qwen CLI UI
 
-一个基于 Web 的 Qwen Code CLI 界面，让您可以从任何设备进行 AI 辅助编程。
+一个基于 Qwen Code 的可视化界面，让您可以随时随地享受 AI 辅助编程的乐趣😊
 
 ![Qwen Code UI](https://img.shields.io/badge/Qwen-Code%20UI-blue?style=for-the-badge&logo=github)
 ![React](https://img.shields.io/badge/React-18.2.0-blue?style=for-the-badge&logo=react)
@@ -8,89 +8,48 @@
 
 ## 🌟 项目特色
 
-- **🌐 响应式 Web 界面** - 支持桌面、平板、手机等各种设备
-- **🤖 AI 辅助编程** - 集成 Qwen Code CLI，提供智能代码建议
+- **🌐 响应式 Web 界面** - 支持桌面、平板、手机等各种设备：*能用浏览器就行* 😂
+- **🤖 AI 辅助编程** - 集成 Qwen Code CLI，提供智能代码建议：*您只管说，AI 帮您写* 😎
 
 ## 🔧 开发中
-- **📁 项目管理** - 可视化文件浏览器，支持多种编程语言
-- **💻 集成终端** - 在 Web 界面中执行命令
-- **🔐 用户认证** - 安全的 JWT 认证系统
+- **🌐 远程访问** - 支持远程访问，这样您才可以真正做到随时随地（让 AI 帮您）编程。
+- **📁 项目管理** - 可视化文件浏览器，实时监控 AI 的劳动成果
+- **💻 集成终端** - 在浏览器中控制您的服务器，就像在本地一样
+- **🔐 用户认证** - 安全的 JWT 认证系统，支持多用户登录
 - **⚙️ 个性化设置** - 支持主题、字体、API 配置等
 
-## 🚀 主要功能
+## 📦 快速开始
 
-### 1. AI 聊天界面
-- 与 Qwen Code AI 进行实时编程对话
-- 支持流式响应，实时显示 AI 回复
-- 智能代码建议和重构建议
-
-### 2. 文件浏览器
-- 可视化项目文件树
-- 在线代码编辑器
-- 支持多种编程语言的语法高亮
-- 实时文件保存
-
-### 3. 终端集成
-- 在 Web 界面中执行命令
-- 实时命令输出显示
-- 项目上下文执行
-
-### 4. 设置管理
-- Qwen API 配置
-- 模型选择（支持多种 Qwen 模型）
-- 界面主题设置
-- 个性化偏好配置
-
-## 📦 安装
-
-### 前置要求
+1. **前置要求**
 - Node.js 20 或更高版本
 - npm 或 yarn
-- Qwen Code CLI（会自动安装）
 
-### 快速开始
-
-1. **克隆仓库**
+2. **克隆仓库**
 ```bash
 git clone https://github.com/yanboc/Qwen-CLI-UI.git
 cd Qwen-CLI-UI
 ```
 
-2. **安装依赖**
+3. **安装依赖**
 ```bash
 npm run install-all
+npm install -g @qwen-code/qwen-code
+# qwen --version
 ```
 
-3. **配置环境变量**
+4. **配置环境变量**
 ```bash
 cp env.example .env
-# 编辑 .env 文件，配置您的 API 密钥
-# 也可以后续在网页中设置
 ```
+- 根据 [Qwen Code](https://github.com/QwenLM/qwen-code) 中的提示配置 API 密钥，在`.env`文件中配置您的 Qwen API 密钥、基础 URL 和模型。
 
-4. **启动应用**
+5. **启动应用**
 ```bash
 npm run dev
 ```
 
-5. **访问应用**
-打开浏览器访问：http://localhost:4009/
-
-## ⚙️ 配置
-
-### API 配置
-
-在设置页面配置以下参数：
-
-#### 中国大陆用户
-- **API Key**: 从 [阿里云 Bailian](https://bailian.console.aliyun.com/) 或 [ModelScope](https://modelscope.cn/docs/model-service/API-Inference/intro) 获取
-- **Base URL**: `https://dashscope.aliyun.com/compatible-mode/v1` 或 `https://api-inference.modelscope.cn/v1`
-- **Model**: `qwen3-coder-plus` 或 `Qwen/Qwen3-Coder-480B-A35B-Instruct`
-
-#### 海外用户
-- **API Key**: 从 [阿里云 ModelStudio](https://modelstudio.console.alibabacloud.com/) 获取
-- **Base URL**: `https://dashscope-intl.aliyuncs.com/compatible-mode/v1`
-- **Model**: `qwen3-coder-plus`
+6. **访问应用**
+打开浏览器访问：http://localhost:4009/ （如果端口被占用，可以修改.env文件中的PORT）
 
 ## 🎯 使用方法
 
@@ -99,62 +58,14 @@ npm run dev
 - 使用用户名和密码登录
 
 ### 2. 配置 API
-- 在设置页面配置您的 Qwen API 密钥
-- 选择合适的基础 URL 和模型
+- 在设置页面配置您的 Qwen API 密钥、基础 URL 和模型
 
 ### 3. 创建项目
-- 点击侧边栏的"+"按钮创建新项目
-- 或选择现有项目
+- 点击侧边栏的"+"按钮创建新项目，或选择现有项目，例如`my-project`
+- 创建成功后，项目文件会保存在`./projects`目录下，例如`./projects/my-project`
 
 ### 4. 开始编程
-- 在聊天界面与 AI 对话
-- 使用文件浏览器管理代码
-- 在终端中执行命令
-
-## 📁 项目结构
-
-```
-qwen-code-ui/
-├── src/                    # 前端源码
-│   ├── components/         # React 组件
-│   ├── contexts/          # React 上下文
-│   └── main.jsx           # 入口文件
-├── server/                # 后端源码
-│   ├── index.js           # 服务器入口
-│   └── database/          # 数据库文件
-├── projects/              # 用户项目目录
-├── public/                # 静态资源
-└── package.json           # 项目配置
-```
-
-## 🔧 开发
-
-### 启动开发服务器
-```bash
-# 启动前端和后端
-npm run dev
-
-# 仅启动前端
-npm run client
-
-# 仅启动后端
-npm run server
-```
-
-### 构建生产版本
-```bash
-npm run build
-```
-
-## 🤝 贡献
-
-欢迎提交 Issue 和 Pull Request！
-
-1. Fork 本仓库
-2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 打开 Pull Request
+- 在聊天界面与 AI 对话，AI 会根据你的需求生成代码，并自动保存到项目文件中
 
 ## 📄 许可证
 
@@ -162,19 +73,7 @@ npm run build
 
 ## 🙏 致谢
 
-- [Qwen Code](https://github.com/QwenLM/qwen-code) - 基于 Google Gemini CLI 的优秀项目
-- [Gemini CLI](https://github.com/google/gemini-cli) - 原始项目灵感来源
-- [React](https://reactjs.org/) - 前端框架
-- [Express](https://expressjs.com/) - 后端框架
-
-## 📞 支持
-
-如果您遇到问题或有建议，请：
-
-1. 查看 [Issues](https://github.com/yanboc/Qwen-CLI-UI/issues)
-2. 创建新的 Issue
-3. 联系维护者
-
----
+- [Qwen Code](https://github.com/QwenLM/qwen-code) - 为 Qwen3-Coder 优化的 CLI 工作流
+- [Gemini CLI UI](https://github.com/cruzyjapan/Gemini-CLI-UI) - 本项目的灵感来源
 
 **⭐ 如果这个项目对您有帮助，请给我们一个 Star！** 
