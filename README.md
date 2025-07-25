@@ -1,4 +1,4 @@
-# Qwen Code UI
+# Qwen CLI UI
 
 一个基于 Web 的 Qwen Code CLI 界面，让您可以从任何设备进行 AI 辅助编程。
 
@@ -10,6 +10,8 @@
 
 - **🌐 响应式 Web 界面** - 支持桌面、平板、手机等各种设备
 - **🤖 AI 辅助编程** - 集成 Qwen Code CLI，提供智能代码建议
+
+## 🔧 开发中
 - **📁 项目管理** - 可视化文件浏览器，支持多种编程语言
 - **💻 集成终端** - 在 Web 界面中执行命令
 - **🔐 用户认证** - 安全的 JWT 认证系统
@@ -39,22 +41,6 @@
 - 界面主题设置
 - 个性化偏好配置
 
-## 🛠️ 技术栈
-
-### 前端
-- **React 18** - 现代化用户界面
-- **Vite** - 快速构建工具
-- **Tailwind CSS** - 美观的样式框架
-- **CodeMirror** - 强大的代码编辑器
-- **Socket.IO Client** - 实时通信
-
-### 后端
-- **Node.js + Express** - 高性能服务器
-- **SQLite3** - 轻量级数据库
-- **JWT + bcrypt** - 安全认证
-- **Socket.IO** - WebSocket 支持
-- **Qwen Code CLI** - AI 编程助手
-
 ## 📦 安装
 
 ### 前置要求
@@ -79,6 +65,7 @@ npm run install-all
 ```bash
 cp env.example .env
 # 编辑 .env 文件，配置您的 API 密钥
+# 也可以后续在网页中设置
 ```
 
 4. **启动应用**
