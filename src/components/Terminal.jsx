@@ -1,121 +1,72 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useProject } from '../contexts/ProjectContext'
-import { Play, Stop, Trash2 } from 'lucide-react'
+import { ExternalLink, RefreshCw } from 'lucide-react'
 
 const Terminal = () => {
   const { currentProject } = useProject()
-  const [output, setOutput] = useState([])
-  const [input, setInput] = useState('')
-  const [isRunning, setIsRunning] = useState(false)
-  const [currentCommand, setCurrentCommand] = useState('')
-  const outputRef = useRef(null)
+  const [ttydUrl, setTtydUrl] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
 
   useEffect(() => {
-    scrollToBottom()
-  }, [output])
-
-  const scrollToBottom = () => {
-    outputRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
-
-  const executeCommand = async (command) => {
-    if (!command.trim() || !currentProject) return
-
-    const commandOutput = {
-      type: 'command',
-      content: `$ ${command}`,
-      timestamp: new Date()
+    if (currentProject) {
+      // 启动ttyd服务并获取URL
+      startTtydService()
     }
+  }, [currentProject])
 
-    setOutput(prev => [...prev, commandOutput])
-    setCurrentCommand(command)
-    setIsRunning(true)
-
+  const startTtydService = async () => {
+    if (!currentProject) return
+    
+    setIsLoading(true)
     try {
-      const response = await fetch('/api/terminal/execute', {
+      const token = localStorage.getItem('qwen_code_token')
+      const response = await fetch('/api/terminal/start-ttyd', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          command,
           projectPath: currentProject.path
         }),
       })
 
       if (response.ok) {
         const data = await response.json()
-        const resultOutput = {
-          type: 'output',
-          content: data.output,
-          timestamp: new Date()
-        }
-        setOutput(prev => [...prev, resultOutput])
+        setTtydUrl(data.ttydUrl)
       } else {
-        const errorOutput = {
-          type: 'error',
-          content: '命令执行失败',
-          timestamp: new Date()
-        }
-        setOutput(prev => [...prev, errorOutput])
+        console.error('Failed to start ttyd service')
       }
     } catch (error) {
-      const errorOutput = {
-        type: 'error',
-        content: '网络错误，请稍后重试',
-        timestamp: new Date()
-      }
-      setOutput(prev => [...prev, errorOutput])
+      console.error('Error starting ttyd service:', error)
     } finally {
-      setIsRunning(false)
-      setCurrentCommand('')
+      setIsLoading(false)
     }
   }
 
-  const handleSubmit = (e) => {
-    e.preventDefault()
-    if (input.trim() && !isRunning) {
-      executeCommand(input)
-      setInput('')
+  const refreshTerminal = () => {
+    startTtydService()
+  }
+
+  const openInNewTab = () => {
+    if (ttydUrl) {
+      window.open(ttydUrl, '_blank')
     }
-  }
-
-  const clearOutput = () => {
-    setOutput([])
-  }
-
-  const stopCommand = async () => {
-    if (!isRunning) return
-
-    try {
-      await fetch('/api/terminal/stop', {
-        method: 'POST',
-      })
-      setIsRunning(false)
-      setCurrentCommand('')
-    } catch (error) {
-      console.error('Failed to stop command:', error)
-    }
-  }
-
-  const formatTimestamp = (timestamp) => {
-    return new Date(timestamp).toLocaleTimeString('zh-CN', {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit'
-    })
   }
 
   if (!currentProject) {
     return (
       <div className="flex items-center justify-center h-full text-gray-500 dark:text-gray-400">
-        请先选择一个项目
+        <div className="text-center">
+          <h3 className="text-lg font-semibold mb-2">请先选择一个项目</h3>
+          <p className="text-sm">选择项目后即可使用终端功能</p>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col h-full bg-black text-green-400 font-mono">
+    <div className="flex flex-col h-full bg-black">
       {/* 终端头部 */}
       <div className="flex items-center justify-between p-4 bg-gray-900 border-b border-gray-700">
         <div className="flex items-center space-x-4">
@@ -128,81 +79,55 @@ const Terminal = () => {
         </div>
         
         <div className="flex items-center space-x-2">
-          {isRunning && (
+          <button
+            onClick={refreshTerminal}
+            disabled={isLoading}
+            className="p-2 rounded-md bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 text-white"
+            title="刷新终端"
+          >
+            <RefreshCw size={16} className={isLoading ? 'animate-spin' : ''} />
+          </button>
+          {ttydUrl && (
             <button
-              onClick={stopCommand}
-              className="p-2 rounded-md bg-red-600 hover:bg-red-700 text-white"
-              title="停止命令"
+              onClick={openInNewTab}
+              className="p-2 rounded-md bg-green-600 hover:bg-green-700 text-white"
+              title="在新标签页中打开"
             >
-              <Stop size={16} />
+              <ExternalLink size={16} />
             </button>
           )}
-          <button
-            onClick={clearOutput}
-            className="p-2 rounded-md bg-gray-700 hover:bg-gray-600 text-white"
-            title="清空输出"
-          >
-            <Trash2 size={16} />
-          </button>
         </div>
       </div>
 
-      {/* 终端输出 */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-1">
-        {output.length === 0 ? (
-          <div className="text-center text-gray-500 mt-8">
-            <p>终端已就绪</p>
-            <p className="text-sm mt-2">输入命令开始执行</p>
-          </div>
-        ) : (
-          output.map((item, index) => (
-            <div key={index} className="flex items-start space-x-2">
-              <span className="text-gray-500 text-xs flex-shrink-0">
-                [{formatTimestamp(item.timestamp)}]
-              </span>
-              <div className={`flex-1 ${
-                item.type === 'error' ? 'text-red-400' : 
-                item.type === 'command' ? 'text-yellow-400' : 
-                'text-green-400'
-              }`}>
-                <pre className="whitespace-pre-wrap break-words">
-                  {item.content}
-                </pre>
-              </div>
+      {/* 终端内容 */}
+      <div className="flex-1 relative">
+        {isLoading ? (
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center text-gray-400">
+              <RefreshCw size={32} className="animate-spin mx-auto mb-4" />
+              <p>正在启动终端服务...</p>
             </div>
-          ))
-        )}
-        
-        {isRunning && (
-          <div className="flex items-center space-x-2 text-yellow-400">
-            <div className="animate-pulse">●</div>
-            <span>正在执行: {currentCommand}</span>
+          </div>
+        ) : ttydUrl ? (
+          <iframe
+            src={ttydUrl}
+            className="w-full h-full border-0"
+            title="Web Terminal"
+            allow="fullscreen"
+          />
+        ) : (
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center text-gray-400">
+              <p>终端服务启动失败</p>
+              <button
+                onClick={refreshTerminal}
+                className="mt-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+              >
+                重试
+              </button>
+            </div>
           </div>
         )}
-        
-        <div ref={outputRef} />
-      </div>
-
-      {/* 命令输入 */}
-      <div className="p-4 border-t border-gray-700">
-        <form onSubmit={handleSubmit} className="flex space-x-2">
-          <span className="text-green-400">$</span>
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="输入命令..."
-            className="flex-1 bg-transparent text-green-400 outline-none border-none"
-            disabled={isRunning}
-          />
-          <button
-            type="submit"
-            disabled={!input.trim() || isRunning}
-            className="px-3 py-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white rounded"
-          >
-            <Play size={14} />
-          </button>
-        </form>
       </div>
     </div>
   )

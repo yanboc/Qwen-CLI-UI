@@ -447,6 +447,173 @@ app.post('/api/terminal/stop', authenticateToken, (req, res) => {
   res.json({ success: true })
 })
 
+// 存储ttyd进程的Map
+const ttydProcesses = new Map()
+
+// 启动ttyd服务的路由
+app.post('/api/terminal/start-ttyd', authenticateToken, (req, res) => {
+  const { projectPath } = req.body
+  const userId = req.user.id
+
+  if (!projectPath) {
+    return res.status(400).json({ error: '项目路径不能为空' })
+  }
+
+  // 检查是否已有ttyd进程在运行
+  const processKey = `${userId}-${projectPath}`
+  if (ttydProcesses.has(processKey)) {
+    const existingProcess = ttydProcesses.get(processKey)
+    if (existingProcess && existingProcess.process && !existingProcess.process.killed) {
+      // 返回现有的ttyd URL
+      return res.json({ 
+        ttydUrl: `http://localhost:${existingProcess.port}`,
+        message: '使用现有终端会话'
+      })
+    } else {
+      // 清理无效的进程记录
+      ttydProcesses.delete(processKey)
+    }
+  }
+
+  // 检查ttyd是否已安装
+  const { exec } = require('child_process')
+  exec('which ttyd', (error) => {
+    if (error) {
+      return res.status(500).json({ 
+        error: 'ttyd未安装，请先运行: bash scripts/install-ttyd.sh' 
+      })
+    }
+
+    // 生成随机端口并检查可用性
+    const findAvailablePort = (startPort) => {
+      return new Promise((resolve) => {
+        const net = require('net')
+        const server = net.createServer()
+        
+        server.listen(startPort, () => {
+          const port = server.address().port
+          server.close(() => resolve(port))
+        })
+        
+        server.on('error', () => {
+          resolve(findAvailablePort(startPort + 1))
+        })
+      })
+    }
+
+    findAvailablePort(5000).then(port => {
+      try {
+        // 启动ttyd进程
+        const absoluteProjectPath = path.resolve(projectPath)
+        const ttydProcess = spawn('ttyd', [
+          '-p', port.toString(),
+          '--writable', // 启用写入模式，允许输入
+          'bash'
+        ], {
+          cwd: absoluteProjectPath,
+          stdio: ['pipe', 'pipe', 'pipe'],
+          env: { ...process.env, TERM: 'xterm-256color' }
+        })
+
+        // 添加调试输出
+        ttydProcess.stdout.on('data', (data) => {
+          console.log('ttyd stdout:', data.toString())
+        })
+
+        ttydProcess.stderr.on('data', (data) => {
+          console.log('ttyd stderr:', data.toString())
+        })
+
+        // 存储进程信息
+        ttydProcesses.set(processKey, {
+          process: ttydProcess,
+          port: port,
+          projectPath: projectPath,
+          userId: userId,
+          startTime: new Date()
+        })
+
+        // 监听进程退出
+        ttydProcess.on('close', (code) => {
+          console.log(`ttyd process closed with code ${code}`)
+          ttydProcesses.delete(processKey)
+        })
+
+        ttydProcess.on('error', (error) => {
+          console.error('ttyd process error:', error)
+          ttydProcesses.delete(processKey)
+        })
+
+        // 等待一下确保进程启动
+        setTimeout(() => {
+          if (!res.headersSent) {
+            res.json({ 
+              ttydUrl: `http://localhost:${port}`,
+              message: '终端服务启动成功'
+            })
+          }
+        }, 1000)
+
+      } catch (error) {
+        console.error('Failed to start ttyd:', error)
+        if (!res.headersSent) {
+          res.status(500).json({ error: '启动终端服务失败' })
+        }
+      }
+    }).catch(error => {
+      console.error('Port finding error:', error)
+      if (!res.headersSent) {
+        res.status(500).json({ error: '端口分配失败' })
+      }
+    })
+  })
+})
+
+// 停止ttyd服务的路由
+app.post('/api/terminal/stop-ttyd', authenticateToken, (req, res) => {
+  const { projectPath } = req.body
+  const userId = req.user.id
+
+  if (!projectPath) {
+    return res.status(400).json({ error: '项目路径不能为空' })
+  }
+
+  const processKey = `${userId}-${projectPath}`
+  const processInfo = ttydProcesses.get(processKey)
+
+  if (processInfo && processInfo.process) {
+    try {
+      processInfo.process.kill('SIGTERM')
+      ttydProcesses.delete(processKey)
+      res.json({ message: '终端服务已停止' })
+    } catch (error) {
+      console.error('Failed to stop ttyd:', error)
+      res.status(500).json({ error: '停止终端服务失败' })
+    }
+  } else {
+    res.json({ message: '没有找到运行的终端服务' })
+  }
+})
+
+// 获取ttyd服务状态的路由
+app.get('/api/terminal/status', authenticateToken, (req, res) => {
+  const userId = req.user.id
+  const userProcesses = []
+
+  for (const [key, processInfo] of ttydProcesses.entries()) {
+    if (key.startsWith(`${userId}-`)) {
+      userProcesses.push({
+        projectPath: processInfo.projectPath,
+        port: processInfo.port,
+        startTime: processInfo.startTime,
+        isRunning: !processInfo.process.killed
+      })
+    }
+  }
+
+  res.json({ processes: userProcesses })
+})
+
 // 设置路由
 app.get('/api/settings', authenticateToken, (req, res) => {
   db.get(

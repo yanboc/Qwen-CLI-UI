@@ -33,12 +33,31 @@ const FileExplorer = () => {
   const loadFiles = async () => {
     if (!currentProject) return
     
+    console.log('Loading files for project:', currentProject)
     setLoading(true)
     try {
-      const response = await fetch(`/api/files?path=${encodeURIComponent(currentProject.path)}`)
+      const token = localStorage.getItem('qwen_code_token')
+      console.log('Token:', token ? 'exists' : 'missing')
+      
+      // 使用完整的URL
+      const apiUrl = `${window.location.protocol}//${window.location.hostname}:4008/api/files?path=${encodeURIComponent(currentProject.path)}`
+      console.log('API URL:', apiUrl)
+      
+      const response = await fetch(apiUrl, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+      console.log('Files API response status:', response.status)
+      
       if (response.ok) {
         const data = await response.json()
+        console.log('Files data:', data)
         setFiles(data.files)
+      } else {
+        const errorText = await response.text()
+        console.error('Files API error:', errorText)
       }
     } catch (error) {
       console.error('Failed to load files:', error)
@@ -49,7 +68,16 @@ const FileExplorer = () => {
 
   const loadFileContent = async (filePath) => {
     try {
-      const response = await fetch(`/api/files/content?path=${encodeURIComponent(filePath)}`)
+      const token = localStorage.getItem('qwen_code_token')
+      const apiUrl = `${window.location.protocol}//${window.location.hostname}:4008/api/files/content?path=${encodeURIComponent(filePath)}`
+      
+      const response = await fetch(apiUrl, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+      
       if (response.ok) {
         const data = await response.json()
         setFileContent(data.content)
@@ -64,10 +92,14 @@ const FileExplorer = () => {
     if (!selectedFile) return
 
     try {
-      const response = await fetch('/api/files/save', {
+      const token = localStorage.getItem('qwen_code_token')
+      const apiUrl = `${window.location.protocol}//${window.location.hostname}:4008/api/files/save`
+      
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
           path: selectedFile,

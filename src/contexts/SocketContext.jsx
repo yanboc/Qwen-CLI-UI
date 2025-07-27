@@ -16,7 +16,18 @@ export const SocketProvider = ({ children }) => {
   const [connected, setConnected] = useState(false)
 
   useEffect(() => {
-    const newSocket = io('http://localhost:4008', {
+    // 动态获取后端端口
+    const getBackendPort = () => {
+      // 从当前URL推断后端端口
+      const currentPort = window.location.port
+      if (currentPort === '4009' || currentPort === '4010') {
+        return '4008' // 后端固定端口
+      }
+      return '4008' // 默认端口
+    }
+
+    const backendPort = getBackendPort()
+    const newSocket = io(`http://localhost:${backendPort}`, {
       transports: ['websocket', 'polling'],
       autoConnect: true,
     })

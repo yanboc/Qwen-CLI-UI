@@ -6,6 +6,7 @@ import Login from './components/Login'
 import Sidebar from './components/Sidebar'
 import Chat from './components/Chat'
 import FileExplorer from './components/FileExplorer'
+import Terminal from './components/Terminal'
 import Settings from './components/Settings'
 
 function AppContent() {
@@ -32,24 +33,7 @@ function AppContent() {
       case 'files':
         return <FileExplorer />
       case 'terminal':
-        return (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center">
-              <h1 className="text-2xl font-bold text-gray-900 mb-4">
-                终端
-              </h1>
-              <p className="text-gray-600 mb-4">
-                请先在文件浏览器中选择一个项目
-              </p>
-              <button 
-                onClick={() => setActiveTab('files')}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-              >
-                去选择项目
-              </button>
-            </div>
-          </div>
-        )
+        return <Terminal />
       case 'settings':
         return <Settings />
       default:

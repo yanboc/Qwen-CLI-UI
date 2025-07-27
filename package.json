@@ -24,24 +24,25 @@
     "@types/node": "^20.0.0",
     "@vitejs/plugin-react": "^4.0.0",
     "autoprefixer": "^10.4.0",
-    "concurrently": "^8.0.0",
+    "concurrently": "^8.2.2",
     "postcss": "^8.4.0",
     "tailwindcss": "^3.3.0",
     "vite": "^4.4.0"
   },
   "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "@codemirror/state": "^6.3.0",
-    "@codemirror/view": "^6.22.0",
     "@codemirror/commands": "^6.3.0",
     "@codemirror/language": "^6.9.0",
     "@codemirror/language-data": "^6.3.0",
     "@codemirror/search": "^6.5.0",
+    "@codemirror/state": "^6.3.0",
     "@codemirror/theme-one-dark": "^6.1.0",
+    "@codemirror/view": "^6.22.0",
     "@uiw/react-codemirror": "^4.21.0",
     "lucide-react": "^0.263.0",
+    "nodemon": "^3.1.10",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
     "react-router-dom": "^6.15.0",
     "socket.io-client": "^4.7.0"
   }
-} 
+}
