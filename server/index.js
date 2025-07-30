@@ -9,8 +9,7 @@ const bcrypt = require('bcrypt')
 const jwt = require('jsonwebtoken')
 const sqlite3 = require('sqlite3').verbose()
 const multer = require('multer')
-// const pty = require('node-pty')
-// const treeKill = require('tree-kill')
+const pty = require('node-pty')
 
 require('dotenv').config()
 
@@ -80,6 +79,112 @@ db.serialize(() => {
   )`)
 })
 
+// 终端会话管理 - 使用 node-pty
+const terminalSessions = new Map()
+
+// 终端管理器
+const terminalManager = {
+  createSession(userId, projectPath, terminalName) {
+    const timestamp = Date.now()
+    const sessionId = `${userId}-${Buffer.from(projectPath).toString('base64').slice(0, 8)}-${timestamp}`
+    
+    // 确保项目路径存在
+    const absoluteProjectPath = path.resolve(projectPath)
+    if (!fs.existsSync(absoluteProjectPath)) {
+      throw new Error('项目路径不存在')
+    }
+    
+    // 创建 pty 进程
+    const shell = process.platform === 'win32' ? 'powershell.exe' : 'bash'
+    const ptyProcess = pty.spawn(shell, [], {
+      name: 'xterm-color',
+      cols: 80,
+      rows: 24,
+      cwd: absoluteProjectPath,
+      env: { ...process.env, TERM: 'xterm-256color' }
+    })
+    
+    // 存储会话
+    const session = {
+      sessionId,
+      userId,
+      projectPath: absoluteProjectPath,
+      terminalName: terminalName || `terminal(${this.getUserSessionCount(userId) + 1})`,
+      ptyProcess,
+      connections: new Set(),
+      startTime: new Date(),
+      isActive: true
+    }
+    
+    terminalSessions.set(sessionId, session)
+    
+    // 监听进程退出
+    ptyProcess.on('exit', () => {
+      console.log(`Terminal session ${sessionId} exited`)
+      this.destroySession(sessionId)
+    })
+    
+    console.log(`Created terminal session: ${sessionId} in ${absoluteProjectPath}`)
+    return sessionId
+  },
+  
+  destroySession(sessionId) {
+    const session = terminalSessions.get(sessionId)
+    if (session) {
+      try {
+        session.ptyProcess.kill()
+      } catch (error) {
+        console.error('Error killing pty process:', error)
+      }
+      
+      // 通知所有连接的客户端
+      session.connections.forEach(socketId => {
+        const socket = io.sockets.sockets.get(socketId)
+        if (socket) {
+          socket.emit('terminal:session_closed', { sessionId })
+        }
+      })
+      
+      terminalSessions.delete(sessionId)
+      console.log(`Destroyed terminal session: ${sessionId}`)
+    }
+  },
+  
+  renameSession(sessionId, newName, userId) {
+    const session = terminalSessions.get(sessionId)
+    if (session && session.userId === userId) {
+      session.terminalName = newName
+      return true
+    }
+    return false
+  },
+  
+  getUserSessions(userId) {
+    const userSessions = []
+    for (const [sessionId, session] of terminalSessions.entries()) {
+      if (session.userId === userId && session.isActive) {
+        userSessions.push({
+          sessionId: session.sessionId,
+          projectPath: session.projectPath,
+          terminalName: session.terminalName,
+          startTime: session.startTime,
+          isActive: session.isActive
+        })
+      }
+    }
+    return userSessions
+  },
+  
+  getUserSessionCount(userId) {
+    return Array.from(terminalSessions.values())
+      .filter(session => session.userId === userId && session.isActive).length
+  },
+  
+  getSession(sessionId) {
+    return terminalSessions.get(sessionId)
+  }
+}
+
 // 认证中间件
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization']
@@ -94,6 +199,22 @@ const authenticateToken = (req, res, next) => {
       return res.status(403).json({ error: '无效的访问令牌' })
     }
     req.user = user
+    next()
+  })
+}
+
+// WebSocket 认证中间件
+const authenticateSocket = (socket, next) => {
+  const token = socket.handshake.auth.token
+  if (!token) {
+    return next(new Error('Authentication error'))
+  }
+  
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) {
+      return next(new Error('Authentication error'))
+    }
+    socket.user = user
     next()
   })
 }
@@ -429,189 +550,77 @@ app.post('/api/chat', authenticateToken, (req, res) => {
   )
 })
 
-// 终端路由
-app.post('/api/terminal/execute', authenticateToken, (req, res) => {
-  const { command, projectPath } = req.body
-
-  if (!command || !projectPath) {
-    return res.status(400).json({ error: '命令和项目路径不能为空' })
-  }
-
-  // 这里应该执行命令
-  // 暂时返回模拟响应
-  res.json({ output: `执行命令: ${command}\n这是模拟的输出结果。` })
-})
-
-app.post('/api/terminal/stop', authenticateToken, (req, res) => {
-  // 停止当前执行的命令
-  res.json({ success: true })
-})
-
-// 存储ttyd进程的Map
-const ttydProcesses = new Map()
-
-// 启动ttyd服务的路由
-app.post('/api/terminal/start-ttyd', authenticateToken, (req, res) => {
-  const { projectPath } = req.body
+// 终端路由 - 使用 node-pty
+app.post('/api/terminal/create', authenticateToken, (req, res) => {
+  const { projectPath, terminalName } = req.body
   const userId = req.user.id
 
   if (!projectPath) {
     return res.status(400).json({ error: '项目路径不能为空' })
   }
 
-  // 检查是否已有ttyd进程在运行
-  const processKey = `${userId}-${projectPath}`
-  if (ttydProcesses.has(processKey)) {
-    const existingProcess = ttydProcesses.get(processKey)
-    if (existingProcess && existingProcess.process && !existingProcess.process.killed) {
-      // 返回现有的ttyd URL
-      return res.json({ 
-        ttydUrl: `http://localhost:${existingProcess.port}`,
-        message: '使用现有终端会话'
-      })
-    } else {
-      // 清理无效的进程记录
-      ttydProcesses.delete(processKey)
-    }
-  }
-
-  // 检查ttyd是否已安装
-  const { exec } = require('child_process')
-  exec('which ttyd', (error) => {
-    if (error) {
-      return res.status(500).json({ 
-        error: 'ttyd未安装，请先运行: bash scripts/install-ttyd.sh' 
-      })
-    }
-
-    // 生成随机端口并检查可用性
-    const findAvailablePort = (startPort) => {
-      return new Promise((resolve) => {
-        const net = require('net')
-        const server = net.createServer()
-        
-        server.listen(startPort, () => {
-          const port = server.address().port
-          server.close(() => resolve(port))
-        })
-        
-        server.on('error', () => {
-          resolve(findAvailablePort(startPort + 1))
-        })
-      })
-    }
-
-    findAvailablePort(5000).then(port => {
-      try {
-        // 启动ttyd进程
-        const absoluteProjectPath = path.resolve(projectPath)
-        const ttydProcess = spawn('ttyd', [
-          '-p', port.toString(),
-          '--writable', // 启用写入模式，允许输入
-          'bash'
-        ], {
-          cwd: absoluteProjectPath,
-          stdio: ['pipe', 'pipe', 'pipe'],
-          env: { ...process.env, TERM: 'xterm-256color' }
-        })
-
-        // 添加调试输出
-        ttydProcess.stdout.on('data', (data) => {
-          console.log('ttyd stdout:', data.toString())
-        })
-
-        ttydProcess.stderr.on('data', (data) => {
-          console.log('ttyd stderr:', data.toString())
-        })
-
-        // 存储进程信息
-        ttydProcesses.set(processKey, {
-          process: ttydProcess,
-          port: port,
-          projectPath: projectPath,
-          userId: userId,
-          startTime: new Date()
-        })
-
-        // 监听进程退出
-        ttydProcess.on('close', (code) => {
-          console.log(`ttyd process closed with code ${code}`)
-          ttydProcesses.delete(processKey)
-        })
-
-        ttydProcess.on('error', (error) => {
-          console.error('ttyd process error:', error)
-          ttydProcesses.delete(processKey)
-        })
-
-        // 等待一下确保进程启动
-        setTimeout(() => {
-          if (!res.headersSent) {
-            res.json({ 
-              ttydUrl: `http://localhost:${port}`,
-              message: '终端服务启动成功'
-            })
-          }
-        }, 1000)
-
-      } catch (error) {
-        console.error('Failed to start ttyd:', error)
-        if (!res.headersSent) {
-          res.status(500).json({ error: '启动终端服务失败' })
-        }
-      }
-    }).catch(error => {
-      console.error('Port finding error:', error)
-      if (!res.headersSent) {
-        res.status(500).json({ error: '端口分配失败' })
-      }
+  try {
+    const sessionId = terminalManager.createSession(userId, projectPath, terminalName)
+    const session = terminalManager.getSession(sessionId)
+    
+    res.json({
+      success: true,
+      sessionId: sessionId,
+      terminalName: session.terminalName,
+      projectPath: session.projectPath,
+      message: '终端会话创建成功'
     })
-  })
+  } catch (error) {
+    console.error('Error creating terminal session:', error)
+    res.status(500).json({ error: error.message || '创建终端会话失败' })
+  }
 })
 
-// 停止ttyd服务的路由
-app.post('/api/terminal/stop-ttyd', authenticateToken, (req, res) => {
-  const { projectPath } = req.body
+app.post('/api/terminal/rename', authenticateToken, (req, res) => {
+  const { sessionId, newName } = req.body
   const userId = req.user.id
 
-  if (!projectPath) {
-    return res.status(400).json({ error: '项目路径不能为空' })
+  if (!sessionId || !newName) {
+    return res.status(400).json({ error: '会话ID和新名称不能为空' })
   }
 
-  const processKey = `${userId}-${projectPath}`
-  const processInfo = ttydProcesses.get(processKey)
-
-  if (processInfo && processInfo.process) {
-    try {
-      processInfo.process.kill('SIGTERM')
-      ttydProcesses.delete(processKey)
-      res.json({ message: '终端服务已停止' })
-    } catch (error) {
-      console.error('Failed to stop ttyd:', error)
-      res.status(500).json({ error: '停止终端服务失败' })
-    }
+  const success = terminalManager.renameSession(sessionId, newName.trim(), userId)
+  if (success) {
+    res.json({ 
+      success: true, 
+      message: '终端重命名成功',
+      terminalName: newName.trim()
+    })
   } else {
-    res.json({ message: '没有找到运行的终端服务' })
+    res.status(404).json({ error: '会话不存在或无权限' })
   }
 })
 
-// 获取ttyd服务状态的路由
-app.get('/api/terminal/status', authenticateToken, (req, res) => {
+app.post('/api/terminal/destroy', authenticateToken, (req, res) => {
+  const { sessionId } = req.body
   const userId = req.user.id
-  const userProcesses = []
 
-  for (const [key, processInfo] of ttydProcesses.entries()) {
-    if (key.startsWith(`${userId}-`)) {
-      userProcesses.push({
-        projectPath: processInfo.projectPath,
-        port: processInfo.port,
-        startTime: processInfo.startTime,
-        isRunning: !processInfo.process.killed
-      })
-    }
+  if (!sessionId) {
+    return res.status(400).json({ error: '会话ID不能为空' })
   }
 
-  res.json({ processes: userProcesses })
+  const session = terminalManager.getSession(sessionId)
+  if (!session || session.userId !== userId) {
+    return res.status(404).json({ error: '会话不存在或无权限' })
+  }
+
+  terminalManager.destroySession(sessionId)
+  res.json({ success: true, message: '终端会话已关闭' })
+})
+
+app.get('/api/terminal/sessions', authenticateToken, (req, res) => {
+  const userId = req.user.id
+  const sessions = terminalManager.getUserSessions(userId)
+  
+  res.json({ 
+    success: true,
+    sessions: sessions
+  })
 })
 
 // 设置路由
@@ -684,15 +693,103 @@ app.post('/api/settings', authenticateToken, (req, res) => {
 })
 
 // WebSocket 连接处理
+io.use(authenticateSocket)
+
 io.on('connection', (socket) => {
-  console.log('Client connected:', socket.id)
+  console.log('Client connected:', socket.id, 'User:', socket.user.username)
+
+  // 连接到终端会话
+  socket.on('terminal:connect', ({ sessionId }) => {
+    const session = terminalManager.getSession(sessionId)
+    if (!session || session.userId !== socket.user.id) {
+      socket.emit('terminal:error', { error: '会话不存在或无权限' })
+      return
+    }
+
+    // 添加连接到会话
+    session.connections.add(socket.id)
+    console.log(`Socket ${socket.id} connected to terminal session ${sessionId}`)
+
+    // 监听 pty 数据输出
+    const onData = (data) => {
+      socket.emit('terminal:data', { sessionId, data })
+    }
+    
+    session.ptyProcess.on('data', onData)
+
+    // 处理终端输入
+    const handleInput = ({ sessionId: inputSessionId, data }) => {
+      if (inputSessionId === sessionId) {
+        try {
+          session.ptyProcess.write(data)
+        } catch (error) {
+          console.error('Error writing to pty:', error)
+          socket.emit('terminal:error', { error: '写入终端失败' })
+        }
+      }
+    }
+    
+    socket.on('terminal:input', handleInput)
+
+    // 处理终端大小调整
+    const handleResize = ({ sessionId: resizeSessionId, cols, rows }) => {
+      if (resizeSessionId === sessionId) {
+        try {
+          session.ptyProcess.resize(cols, rows)
+        } catch (error) {
+          console.error('Error resizing terminal:', error)
+        }
+      }
+    }
+    
+    socket.on('terminal:resize', handleResize)
+
+    // 断开连接时清理
+    const cleanup = () => {
+      session.connections.delete(socket.id)
+      session.ptyProcess.removeListener('data', onData)
+      socket.removeListener('terminal:input', handleInput)
+      socket.removeListener('terminal:resize', handleResize)
+      socket.removeListener('disconnect', cleanup)
+      console.log(`Socket ${socket.id} disconnected from terminal session ${sessionId}`)
+    }
+
+    socket.on('disconnect', cleanup)
+    
+    // 发送连接成功消息
+    socket.emit('terminal:connected', { sessionId })
+    
+    // 发送初始数据以显示提示符（如果终端刚创建）
+    setTimeout(() => {
+      try {
+        // 发送一个空字符来触发提示符显示
+        session.ptyProcess.write('')
+      } catch (error) {
+        console.error('Error sending initial data:', error)
+      }
+    }, 100)
+  })
+
+  // 断开特定终端连接
+  socket.on('terminal:disconnect', ({ sessionId }) => {
+    const session = terminalManager.getSession(sessionId)
+    if (session) {
+      session.connections.delete(socket.id)
+    }
+  })
 
   socket.on('disconnect', () => {
     console.log('Client disconnected:', socket.id)
+    
+    // 清理所有会话连接
+    for (const [sessionId, session] of terminalSessions.entries()) {
+      session.connections.delete(socket.id)
+    }
   })
 })
 
 // 启动服务器
 server.listen(PORT, () => {
   console.log(`Qwen Code UI Server running on port ${PORT}`)
+  console.log('Terminal sessions using node-pty + WebSocket')
 }) 

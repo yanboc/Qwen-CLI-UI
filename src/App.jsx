@@ -26,19 +26,31 @@ function AppContent() {
     return <Login />
   }
 
+  // 修改：使用显示/隐藏控制，而不是条件渲染
   const renderActiveTab = () => {
-    switch (activeTab) {
-      case 'chat':
-        return <Chat />
-      case 'files':
-        return <FileExplorer />
-      case 'terminal':
-        return <Terminal />
-      case 'settings':
-        return <Settings />
-      default:
-        return <Chat />
-    }
+    return (
+      <div className="h-full">
+        {/* 聊天组件 */}
+        <div className={`h-full ${activeTab === 'chat' ? 'block' : 'hidden'}`}>
+          <Chat />
+        </div>
+        
+        {/* 文件浏览器组件 */}
+        <div className={`h-full ${activeTab === 'files' ? 'block' : 'hidden'}`}>
+          <FileExplorer />
+        </div>
+        
+        {/* 终端组件 - 始终存在，只控制显示/隐藏 */}
+        <div className={`h-full ${activeTab === 'terminal' ? 'block' : 'hidden'}`}>
+          <Terminal />
+        </div>
+        
+        {/* 设置组件 */}
+        <div className={`h-full ${activeTab === 'settings' ? 'block' : 'hidden'}`}>
+          <Settings />
+        </div>
+      </div>
+    )
   }
 
   return (

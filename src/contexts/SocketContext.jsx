@@ -27,13 +27,23 @@ export const SocketProvider = ({ children }) => {
     }
 
     const backendPort = getBackendPort()
+    const token = localStorage.getItem('qwen_code_token')
+    
+    if (!token) {
+      console.log('No auth token found, skipping socket connection')
+      return
+    }
+
     const newSocket = io(`http://localhost:${backendPort}`, {
       transports: ['websocket', 'polling'],
       autoConnect: true,
+      auth: {
+        token: token
+      }
     })
 
     newSocket.on('connect', () => {
-      console.log('Connected to server')
+      console.log('Connected to server with authentication')
       setConnected(true)
     })
 
@@ -43,8 +53,14 @@ export const SocketProvider = ({ children }) => {
     })
 
     newSocket.on('connect_error', (error) => {
-      console.error('Connection error:', error)
+      console.error('Connection error:', error.message)
       setConnected(false)
+      
+      // 如果是认证错误，清除token并重新登录
+      if (error.message === 'Authentication error') {
+        localStorage.removeItem('qwen_code_token')
+        window.location.reload()
+      }
     })
 
     setSocket(newSocket)
@@ -53,6 +69,23 @@ export const SocketProvider = ({ children }) => {
       newSocket.close()
     }
   }, [])
+
+  // 监听token变化，重新连接
+  useEffect(() => {
+    const handleStorageChange = () => {
+      const token = localStorage.getItem('qwen_code_token')
+      if (token && !connected) {
+        // Token存在但未连接，重新连接
+        window.location.reload()
+      } else if (!token && connected) {
+        // Token被移除，断开连接
+        socket?.close()
+      }
+    }
+
+    window.addEventListener('storage', handleStorageChange)
+    return () => window.removeEventListener('storage', handleStorageChange)
+  }, [connected, socket])
 
   const emit = (event, data) => {
     if (socket && connected) {
